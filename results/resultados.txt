@@ -1,0 +1,5 @@
+| Escenario          | Nodos Explorados | Tiempo de Ejecución |
+|--------------------|------------------|---------------------|
+| caso_base.txt      | 100              | 0.000287s           |
+| caso_medio.txt     | 117              | 0.000331s           |
+| caso_limite.txt    | 91               | 0.000226s           |
