@@ -1,42 +1,68 @@
 # /src/algoritmo_a_estrella.py
 import time
 import heapq 
-import os # Necesario para cargar datos
+import os
+import logging # Importar logging
+
+# Configurar el logger
+# (Se configura en main_gui.py, pero podemos obtener el logger aquí)
+log = logging.getLogger(__name__)
 
 def cargar_datos(nombre_archivo_relativo):
     """
     Carga un mapa desde una ruta relativa a la raíz del proyecto (ej: "data/caso_base.txt").
-    Retorna el mapa como una lista de listas, y las posiciones de inicio y fin.
+    Valida la existencia, formato, y presencia de S/E. [cite: 328, 330]
     """
     mapa = []
     inicio = None
     fin = None
+    
     try:
-        # Construye la ruta absoluta basada en la ubicación de este script
-        script_dir = os.path.dirname(__file__) # Directorio actual (src)
-        project_root = os.path.dirname(script_dir) # Raíz del proyecto
+        script_dir = os.path.dirname(__file__)
+        project_root = os.path.dirname(script_dir)
         ruta_completa = os.path.join(project_root, nombre_archivo_relativo)
 
+        if not os.path.exists(ruta_completa): # [cite: 328]
+            log.error(f"Archivo no encontrado en: {ruta_completa}")
+            raise FileNotFoundError(f"No se encontró el archivo en {ruta_completa}")
+
         with open(ruta_completa, 'r') as f:
-            for i, linea in enumerate(f):
+            lineas = f.readlines()
+            if not lineas: # [cite: 331]
+                log.warning(f"El archivo '{nombre_archivo_relativo}' está vacío.")
+                return None, None, None, "Error: El archivo está vacío."
+
+            ancho_esperado = len(lineas[0].strip()) # Longitud de la primera fila 
+
+            for i, linea in enumerate(lineas):
+                linea_limpia = linea.strip()
+                
+                # Validar formato de filas y columnas consistentes 
+                if len(linea_limpia) != ancho_esperado:
+                    log.error(f"Formato inválido: Fila {i} tiene {len(linea_limpia)} columnas, se esperaban {ancho_esperado}.")
+                    return None, None, None, "Error: El mapa tiene filas de distinto largo."
+
                 fila = []
-                for j, char in enumerate(linea.strip()):
+                for j, char in enumerate(linea_limpia):
                     if char == 'S':
                         inicio = (i, j)
                     elif char == 'E':
                         fin = (i, j)
                     fila.append(char)
                 mapa.append(fila)
-        print(f"Mapa '{nombre_archivo_relativo}' cargado correctamente.")
-        if inicio is None or fin is None:
-             print("Advertencia: No se encontró 'S' (inicio) o 'E' (fin) en el mapa.")
-        return mapa, inicio, fin
+        
+        if inicio is None or fin is None: # [cite: 331]
+             log.warning(f"No se encontró 'S' (inicio) o 'E' (fin) en el mapa '{nombre_archivo_relativo}'.")
+             return mapa, None, None, "Error: Mapa no tiene 'S' o 'E'."
+        
+        log.info(f"Mapa '{nombre_archivo_relativo}' cargado correctamente.")
+        return mapa, inicio, fin, "Mapa cargado. Listo para ejecutar."
+        
     except FileNotFoundError:
-        print(f"Error: No se encontró el archivo de mapa en '{ruta_completa}'")
-        return None, None, None
+        return None, None, None, "Error: Archivo no encontrado."
     except Exception as e:
-        print(f"Error al cargar el mapa: {e}")
-        return None, None, None
+        log.error(f"Error inesperado al cargar el mapa: {e}")
+        return None, None, None, "Error: Ocurrió un problema al leer el archivo."
 
 def calcular_heuristica_manhattan(a, b):
     """Calcula la distancia Manhattan entre dos puntos (tuplas)."""
@@ -48,29 +74,27 @@ def buscar_camino(mapa, inicio, fin, estrategia="a_estrella"):
     """
     Implementa A*, Dijkstra y Greedy Best-First.
     Retorna (camino, nodos_explorados, largo_camino).
-    'largo_camino' es -1 si no se encuentra.
     """
     if not mapa or not inicio or not fin:
-        print("Error: Mapa, inicio o fin inválidos para resolver.")
+        log.error("Se intentó buscar camino sin mapa, inicio o fin válidos.")
         return None, 0, -1
 
+    log.info(f"Iniciando búsqueda con estrategia: {estrategia.upper()}")
+    
     lista_abierta = []
     contador = 0
-    # Calcular heurística inicial
     h_inicial = calcular_heuristica_manhattan(inicio, fin)
     
-    # La prioridad inicial depende de la estrategia
     if estrategia == "dijkstra":
-        prioridad_inicial = 0 # g(n)
+        prioridad_inicial = 0
     elif estrategia == "greedy":
-        prioridad_inicial = h_inicial # h(n)
-    else: # "a_estrella" por defecto
-        prioridad_inicial = 0 + h_inicial # g(n) + h(n)
+        prioridad_inicial = h_inicial
+    else: 
+        prioridad_inicial = 0 + h_inicial
 
     heapq.heappush(lista_abierta, (prioridad_inicial, contador, inicio)) 
     
     g_cost = {inicio: 0}
-    # f_cost ya no se guarda, solo se usa para la prioridad del heap
     padres = {inicio: None}
     lista_cerrada = set()
     nodos_explorados = 0
@@ -90,7 +114,8 @@ def buscar_camino(mapa, inicio, fin, estrategia="a_estrella"):
             while temp:
                 camino.append(temp)
                 temp = padres[temp]
-            largo_camino = len(camino) - 1 # El largo real del camino (costo)
+            largo_camino = len(camino) - 1
+            log.info(f"Búsqueda exitosa. Estrategia: {estrategia.upper()}. Pasos: {largo_camino}. Nodos explorados: {nodos_explorados}.") # [cite: 350, 351, 369]
             return camino[::-1], nodos_explorados, largo_camino
 
         vecinos_mov = [(0, 1), (0, -1), (1, 0), (-1, 0)]
@@ -108,8 +133,6 @@ def buscar_camino(mapa, inicio, fin, estrategia="a_estrella"):
                         
                         heuristica = calcular_heuristica_manhattan(vecino_pos, fin)
                         
-                        # --- AQUÍ ESTÁ LA MAGIA ---
-                        # La prioridad cambia según la estrategia
                         prioridad = 0
                         if estrategia == "a_estrella":
                             prioridad = tentativo_g_cost + heuristica
@@ -121,5 +144,5 @@ def buscar_camino(mapa, inicio, fin, estrategia="a_estrella"):
                         contador += 1
                         heapq.heappush(lista_abierta, (prioridad, contador, vecino_pos))
 
-    print(f"No se encontró un camino para la estrategia '{estrategia}'.")
+    log.warning(f"No se encontró un camino para la estrategia '{estrategia}'. Nodos explorados: {nodos_explorados}.") # [cite: 341]
     return None, nodos_explorados, -1
